@@ -1,0 +1,137 @@
+---
+title: "Customer Analysis Dashboard"
+author: "Annie"
+format: 
+  dashboard:
+    theme: cosmo
+editor: visual
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| include: false
+
+# 1. Load required packages
+library(readr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(scales)
+
+# 2. Read and clean data 
+
+raw_data <- read_delim("marketing_campaign.csv", delim = "\t", show_col_types = FALSE)
+
+clean_data <- raw_data %>% 
+  distinct() %>% 
+  mutate(Income = parse_number(as.character(Income)),
+    Dt_Customer = dmy(Dt_Customer, quiet = TRUE)) %>% filter(!is.na(Income), Income > 0) %>% 
+  mutate(Total_Spending = rowSums(across(c(MntWines, MntFruits, MntMeatProducts, MntFishProducts, MntSweetProducts, MntGoldProds)), na.rm = TRUE),
+    Total_Purchases = rowSums(across(c(NumWebPurchases, NumCatalogPurchases, NumStorePurchases)), na.rm = TRUE) )
+
+customer_data <- clean_data
+```
+
+## Row {height="30%"}
+
+```{r}
+#| content: valuebox
+#| title: "Total Customers"
+#| color: primary
+#| icon: people
+
+list(value = comma(nrow(customer_data)))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Average Income ($)"
+#| color: success
+#| icon: currency-dollar
+
+list(value = comma(round(mean(customer_data$Income, na.rm = TRUE))))
+```
+
+```{r}
+#| content: valuebox
+#| title: "Total Spending ($)"
+#| color: info
+#| icon: cart
+
+list(value = comma(sum(customer_data$Total_Spending, na.rm = TRUE)))
+```
+
+## Row {height="70%"}
+
+### Column {width="33%"}
+
+```{r}
+#| title: "Spending by Product Category"
+#| fig-width: 9
+#| fig-height: 4.2 
+spending_data <- data.frame(
+  Category = c("Wines", "Fruits", "Meat", "Fish", "Sweets", "Gold"),
+  Spending = c(
+    sum(customer_data$MntWines, na.rm = TRUE),
+    sum(customer_data$MntFruits, na.rm = TRUE),
+    sum(customer_data$MntMeatProducts, na.rm = TRUE),
+    sum(customer_data$MntFishProducts, na.rm = TRUE),
+    sum(customer_data$MntSweetProducts, na.rm = TRUE),
+    sum(customer_data$MntGoldProds, na.rm = TRUE)
+  )
+)
+
+ggplot(spending_data, aes(x = reorder(Category, Spending), y = Spending, fill = Category)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  scale_y_continuous(labels = comma) +
+  labs(x = NULL, y = "Total Spending ($)") +
+  theme_minimal(base_size = 11)
+```
+
+### Column {width="33%"}
+
+```{r}
+#| title: "Purchases by Channel"
+#| fig-width: 9
+#| fig-height: 4.2 
+channel_data <- data.frame(
+  Channel = c("Web", "Catalog", "Store"),
+  Purchases = c(
+    sum(customer_data$NumWebPurchases, na.rm = TRUE),
+    sum(customer_data$NumCatalogPurchases, na.rm = TRUE),
+    sum(customer_data$NumStorePurchases, na.rm = TRUE)
+  )
+)
+
+ggplot(channel_data, aes(x = Channel, y = Purchases)) +
+  geom_col(fill = "#3182bd", width = 0.6) +
+  scale_y_continuous(labels = comma) +
+  labs(x = "Purchase Channel", y = "Total Purchases") +
+  theme_minimal(base_size = 11)
+```
+
+### Column {width="33%"}
+
+```{r}
+#| title: "Average Spending by Income Group"
+#| fig-width: 9
+#| fig-height: 4.2
+
+income_group_data <- customer_data %>%
+  mutate(Income_Group = cut(Income, 
+                            breaks = c(0, 30000, 50000, 70000, 100000, Inf), 
+                            labels = c("< $30k", "$30k-$50k", "$50k-$70k", "$70k-$100k", "> $100k"))) %>%
+  group_by(Income_Group) %>%
+  summarise(Avg_Spending = mean(Total_Spending, na.rm = TRUE)) %>%
+  filter(!is.na(Income_Group))
+
+ggplot(income_group_data, aes(x = Income_Group, y = Avg_Spending, fill = Income_Group)) +
+  geom_col(show.legend = FALSE, width = 0.6) +
+  scale_y_continuous(labels = comma) +
+  labs(x = "Income Group", y = "Average Spending ($)") +
+  theme_minimal(base_size = 13)
+```
